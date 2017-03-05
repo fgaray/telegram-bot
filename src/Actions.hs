@@ -32,7 +32,7 @@ processAction Update{..} =
 -- function
 processTextMessage :: Text -> IO (Maybe Text)
 processTextMessage txt = do
-    output <- readProcess "awk" ["-f", "messages.awk"] (unpack txt)
+    output <- readProcess "gawk" ["-f", "messages.awk"] (unpack txt)
     case output of
         "" -> return Nothing
         str -> return . Just . pack $ str

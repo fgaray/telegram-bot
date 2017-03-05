@@ -1,6 +1,7 @@
 /AYY/ { print "LMAO" }
 
 tolower($0) ~ /(\w)* linux (\w)*/ { print "*GNU/Linux" }
+tolower($0) ~ /linux/ { print "*GNU/Linux" }
 
 
 /interject/ { 
@@ -11,3 +12,10 @@ tolower($0) ~ /(\w)* linux (\w)*/ { print "*GNU/Linux" }
 
 
 /version?/ { print "Version: 0.1" }
+
+/dbsize/ {
+  "du -k los-programadores.sqlite3" |& getline du
+  printf("Size: %s kb\n", du)
+  "echo 'SELECT COUNT(*) FROM update_message' | sqlite3 los-programadores.sqlite3" |& getline sqlite
+  printf("Messages: %s\n", sqlite)
+}
