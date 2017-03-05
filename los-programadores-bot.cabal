@@ -29,4 +29,9 @@ executable los-programadores-bot
                        monad-logger,
                        text,
                        esqueleto,
-                       process
+                       process,
+                       fast-logger,
+                       transformers,
+                       cereal,
+                       cereal-text,
+                       bytestring

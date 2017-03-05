@@ -6,17 +6,20 @@ import Web.Telegram.API.Bot
 import Data.Text
 import Control.Monad.IO.Class
 import System.Process
+import Control.Monad.Trans.Maybe
+import System.Log.FastLogger
+import Logger
 
 
-processAction :: Update -> TelegramClient ()
-processAction Update{..} =
+processAction :: LoggerSet -> Update -> TelegramClient ()
+processAction logger Update{..} =
     case message of
         Nothing -> return ()
         Just Message{..} -> do
             case text of
                 Nothing -> return ()
                 Just msg -> do
-                    txt <- liftIO $ processTextMessage msg
+                    txt <- liftIO $ processTextMessage logger msg
                     case txt of
                         -- | There is nothing to return
                         Nothing -> return ()
@@ -30,9 +33,13 @@ processAction Update{..} =
 -- | We call a program in awk to do simple regex and sustitution in the
 -- messages, in the future we can implemente more complex funcionalities in this
 -- function
-processTextMessage :: Text -> IO (Maybe Text)
-processTextMessage txt = do
+processTextMessage :: LoggerSet -> Text -> IO (Maybe Text)
+processTextMessage logger txt = do
+    pushLogStrLn logger "Calling external process"
     output <- readProcess "gawk" ["-f", "messages.awk"] (unpack txt)
+    pushLogStrLn logger "Process finishied"
     case output of
         "" -> return Nothing
         str -> return . Just . pack $ str
+
+

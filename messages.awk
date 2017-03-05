@@ -16,6 +16,21 @@ tolower($0) ~ /linux/ { print "*GNU/Linux" }
 /dbsize/ {
   "du -k los-programadores.sqlite3" |& getline du
   printf("Size: %s kb\n", du)
-  "echo 'SELECT COUNT(*) FROM update_message' | sqlite3 los-programadores.sqlite3" |& getline sqlite
+  "echo 'SELECT COUNT(*) FROM update_message;' | sqlite3 los-programadores.sqlite3" |& getline sqlite
   printf("Messages: %s\n", sqlite)
+}
+
+/showlog/ {
+  command = "tail bot_log.txt"
+  while((command |& getline line) > 0){
+      print line
+  }
+}
+
+/dbstats/ {
+    command = "echo 'SELECT first_name,COUNT(*) FROM update_message,user WHERE \"from\" == user.id GROUP BY \"from\";' | sqlite3 los-programadores.sqlite3"
+    print "Messages by user:"
+    while((command |& getline line) > 0){
+        print line
+    }
 }

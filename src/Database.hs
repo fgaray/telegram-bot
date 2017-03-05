@@ -24,6 +24,30 @@ import Database.Esqueleto
 import qualified Database.Esqueleto as DB
 import Data.Maybe
 import Data.Traversable (sequence)
+import Data.Serialize
+import Data.Serialize.Text
+import qualified Data.ByteString as BS
+
+instance Serialize Venue
+instance Serialize Contact
+instance Serialize Voice
+instance Serialize Video
+instance Serialize Sticker
+instance Serialize Animation
+instance Serialize Game
+instance Serialize PhotoSize
+instance Serialize Document
+instance Serialize Audio
+instance Serialize MessageEntity
+instance Serialize ChatType
+instance Serialize CallbackQuery
+instance Serialize ChosenInlineResult
+instance Serialize Location
+instance Serialize Chat
+instance Serialize InlineQuery
+instance Serialize Telegram.User
+instance Serialize Message
+instance Serialize Update
 
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
@@ -83,6 +107,9 @@ saveUpdateMessage u@Update{..} = do
                     insertedEntities <- sequence $ fmap (mapM insertEntityDB) entities
                     replyTo <- liftM join . sequence . fmap getReplyTo $ reply_to_message 
                     insert $ UpdateMessage update_id message_id userId date (chat_id chat) text replyTo
+                    let serialized = encode u
+                    liftIO $ print ("Escribiendo "  ++ show update_id)
+                    liftIO $ BS.writeFile ("los-programadores-all/" ++ show update_id ++  ".cereal") serialized
                     return . Just $ u
 
 
@@ -100,6 +127,7 @@ getUserDB :: Int -> ReaderT SqlBackend (NoLoggingT (ResourceT IO)) (Maybe (Entit
 getUserDB userId = liftM listToMaybe . select $
     from $ \u -> do
     where_ (u ^. UserUserIdTelegram ==. val userId)
+    limit 1
     return u
 
 
@@ -116,5 +144,13 @@ getReplyTo :: Message -> ReaderT SqlBackend (NoLoggingT (ResourceT IO)) (Maybe (
 getReplyTo Message{..} = liftM (fmap entityKey . listToMaybe) . select $
     DB.from $ \u -> do
     where_ (u ^. UpdateMessageMessageId ==. val message_id)
+    limit 1
     return u
     
+
+getLastOffset :: ReaderT SqlBackend (NoLoggingT (ResourceT IO)) (Maybe Int)
+getLastOffset = liftM (fmap unValue . listToMaybe) . select $
+    from $ \u -> do
+    orderBy [desc (u ^. UpdateMessageMessageId)]
+    limit 1
+    return (u ^. UpdateMessageUpdateId)
