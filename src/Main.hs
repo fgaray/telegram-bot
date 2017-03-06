@@ -16,15 +16,15 @@ import Data.String
 import System.Log.FastLogger
 import Tests
 import Network.HTTP.Client
-
-
-token :: Token
-token = Token "bot312434737:AAF0tWwVauiLE637wgyOjXntiPO0HRAPRNs"
+import System.Environment (getEnv)
+import Data.Text (pack)
+import Control.Monad.Reader (ask)
 
 
 
 main :: IO ()
 main = do
+    token <- liftM (Token . pack) $ getEnv "TOKEN"
     logger <- startLogger
     manager <- newManager tlsManagerSettings
     migrate
@@ -35,6 +35,7 @@ client :: LoggerSet -> Manager -> TelegramClient ()
 client logger manager = forever $ do
     lastOffset <- liftIO . runDB $ getLastOffset
     log logger $ (fromString . show $ lastOffset)
+    token <- ask
     updates <- liftIO $ getUpdates token lastOffset Nothing Nothing  manager
     case updates of
         Left err -> log logger (fromString $ show err)

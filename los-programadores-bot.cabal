@@ -34,4 +34,5 @@ executable los-programadores-bot
                        transformers,
                        cereal,
                        cereal-text,
-                       bytestring
+                       bytestring,
+                       regex-tdfa
