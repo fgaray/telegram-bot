@@ -25,6 +25,7 @@ import Control.Monad.Reader (ask)
 main :: IO ()
 main = do
     token <- liftM (Token . pack) $ getEnv "TOKEN"
+    print token
     logger <- startLogger
     manager <- newManager tlsManagerSettings
     migrate
