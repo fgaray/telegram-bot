@@ -58,14 +58,15 @@ processAction logger Update{..} =
 processTextMessage :: Text -> IO (Maybe Text)
 processTextMessage txt
     | str =~ ("(\\w|\\ )*AY(Y)+(\\w|\\ )*" :: String) = return . Just $ "LMAO"
-    | str =~ ("(\\ )*(l|L)inux(\\ )*" :: String)          = return . Just $ "*GNU/Linux"
-    | str =~ ("interject" :: String)                  = outputFile "interject.txt"
-    | str =~ ("dbsize" :: String)                     = liftM Just $ dbsize
-    | str =~ ("dbstats" :: String)                    = liftM Just $ dbstats
-    | str =~ ("markovtrain (\\w)*" :: String)         = markovTrain txt
-    | str =~ ("markov (\\w)*" :: String)              = markov txt
-    | str =~ ("ask (\\w)*" :: String)                 = cobe txt
-    | str =~ ("train" :: String)                      = cobeTrain
+    | str =~ ("(\\ )*(l|L)inux(\\ )*" :: String)      = return . Just $ "*GNU/Linux"
+    | str =~ ("^(\\ )*(OMG|omg)(\\ )*$" :: String)      = return . Just $ "我的天啊!"
+    | str =~ ("^interject$" :: String)                  = outputFile "interject.txt"
+    | str =~ ("^dbsize$" :: String)                     = liftM Just $ dbsize
+    | str =~ ("^dbstats$" :: String)                    = liftM Just $ dbstats
+    | str =~ ("^markovtrain (\\w)*" :: String)         = markovTrain txt
+    | str =~ ("^markov (\\w)*" :: String)              = markov txt
+    | str =~ ("^ask (\\w)*" :: String)                 = cobe txt
+    | str =~ ("^train$" :: String)                      = cobeTrain
     | otherwise = return Nothing
     where
         str = unpack txt
@@ -88,6 +89,7 @@ dbstats = runDB $ do
     xs <- select $
         from $ \(m, u) -> do
         where_ (m ^. UpdateMessageFrom ==. just (u ^. UserId))
+        mapM (\x -> where_ (not_ $ m ^. UpdateMessageMessage `like` just (val $ "%" <> x <> "%"))) commands
         groupBy (just $ m ^. UpdateMessageFrom)
         return (u ^. UserFirstName, countRows :: SqlExpr (Value Int))
     let text = foldl' (\acc (name, rows) -> acc <> unValue name <> ": " <> (pack . show . unValue $ rows) <> "\n") "" xs
