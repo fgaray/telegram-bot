@@ -59,15 +59,15 @@ processTextMessage :: Text -> IO (Maybe Text)
 processTextMessage txt
     | str =~ ("(\\w|\\ )*AY(Y)+(\\w|\\ )*" :: String) = return . Just $ "LMAO"
     | str =~ ("(\\ )*(l|L)inux(\\ )*" :: String)      = return . Just $ "*GNU/Linux"
-    | str =~ ("^(\\ )*(OMG|omg)(\\ )*$" :: String)      = return . Just $ "我的天啊!"
-    | str =~ ("^interject$" :: String)                  = outputFile "interject.txt"
-    | str =~ ("^dbsize$" :: String)                     = liftM Just $ dbsize
-    | str =~ ("^dbstats$" :: String)                    = liftM Just $ dbstats
-    | str =~ ("^markovtrain (\\w)*" :: String)         = markovTrain txt
-    | str =~ ("^markov (\\w)*" :: String)              = markov txt
-    | str =~ ("^ask (\\w)*" :: String)                 = cobe txt
-    | str =~ ("^train$" :: String)                      = cobeTrain
-    | otherwise = return Nothing
+    | str =~ ("^(\\ )*(OMG|omg)(\\ )*$" :: String)    = return . Just $ "我的天啊!"
+    | str =~ ("^interject$" :: String)                = outputFile "interject.txt"
+    | str =~ ("^dbsize$" :: String)                   = liftM Just $ dbsize
+    | str =~ ("^dbstats$" :: String)                  = liftM Just $ dbstats
+    | str =~ ("^markovtrain (\\w)*" :: String)        = markovTrain txt
+    | str =~ ("^markov (\\w)*" :: String)             = markov txt
+    | str =~ ("^ask (\\w)*" :: String)                = cobe txt
+    | str =~ ("^train$" :: String)                    = cobeTrain
+    | otherwise                                       = return Nothing
     where
         str = unpack txt
 
