@@ -1,9 +1,31 @@
-# Los Programadores Bot
+# Private Telegram  Bot
 
 This is a bot for a private chat room in Telegram using Haskell. The current
-state is very simply: it just store the messages in a sqlite databse and execute
-an awk program for matching strings.
+state is very simply: it just store the messages in a sqlite database and
+respond to messages with matching regex.
 
 
-We are using an awk program so anybody in the chat can add their own simple bot
-responses in messages.awk.
+# Compile
+
+You need stack to compile this bot. Use:
+
+
+```
+stack build
+```
+
+To build the bot.
+
+
+# How to run
+
+You need an API key for a telegram bot. Then just run:
+
+```
+TOKEN=YOUR-API-KEY ./los-programadores-bot
+```
+
+# New actions
+
+If you want to add new actions that respond to messages, you can add them in
+src/Actions.hs with a POSIX regex.
