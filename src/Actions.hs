@@ -19,16 +19,20 @@ import Database.Esqueleto
 import Data.Maybe
 import Data.Monoid
 import Data.List (foldl')
+import Plots
+import Data.ByteString (ByteString)
+import Network.Mime
 
 
-commands :: [Text]
-commands = [
-      "dbsize"
-    , "dbstats"
-    , "markov"
-    , "markovtrain"
-    , "ask"
-    , "train"
+
+commandsHelp :: [(Text, Text)]
+commandsHelp = [
+      ("/dbsize", "Shows the number of total messages in the DB")
+    , ("/dbstats", "Show the number of messages per user")
+    , ("/markov [USER]", "")
+    , ("/markovtrain [USER]", "Trains a markov chain using the messages of the [USER]")
+    , ("/last [USER]", "Show the last message of the [USER]")
+    , ("/help", "Shows this help")
     ]
 
 
@@ -42,13 +46,23 @@ processAction logger Update{..} =
                 Nothing -> return ()
                 Just msg -> do
                     txt <- liftIO $ processTextMessage msg
+                    let chatId = ChatId . chat_id $ chat
                     case txt of
                         -- | There is nothing to return
-                        Nothing -> return ()
+                        Nothing -> do
+                            photo <- liftIO $ processPhotoMessage msg
+                            case photo of
+                                Nothing -> return ()
+                                Just photo' -> do
+                                    let upload = localFileUpload photo'
+                                        rq = (uploadPhotoRequest chatId upload) {
+                                            photo_caption = Just "Stats"
+                                        }
+                                    uploadPhotoM rq
+                                    return ()
                         Just txt' -> do
-                            let chatId = pack . show . chat_id $ chat
-                                request = SendMessageRequest chatId txt' Nothing Nothing Nothing Nothing Nothing
-                            response <- sendMessageM request
+                            let request = SendMessageRequest chatId txt' Nothing Nothing Nothing Nothing Nothing
+                            sendMessageM request
                             return ()
 
 
@@ -57,20 +71,30 @@ processAction logger Update{..} =
 -- function
 processTextMessage :: Text -> IO (Maybe Text)
 processTextMessage txt
-    | str =~ ("(\\w|\\ )*AY(Y)+(\\w|\\ )*" :: String) = return . Just $ "LMAO"
-    | str =~ ("(\\ )*(l|L)inux(\\ )*" :: String)      = return . Just $ "*GNU/Linux"
-    | str =~ ("^(\\ )*(OMG|omg)(\\ )*$" :: String)    = return . Just $ "我的天啊!"
-    | str =~ ("^interject$" :: String)                = outputFile "interject.txt"
-    | str =~ ("^dbsize$" :: String)                   = liftM Just $ dbsize
-    | str =~ ("^dbstats$" :: String)                  = liftM Just $ dbstats
-    | str =~ ("^markovtrain (\\w)*" :: String)        = markovTrain txt
-    | str =~ ("^markov (\\w)*" :: String)             = markov txt
-    | str =~ ("^ask (\\w)*" :: String)                = cobe txt
-    | str =~ ("^train$" :: String)                    = cobeTrain
-    | otherwise                                       = return Nothing
+    {-| str =~ ("(\\w|\\ )*AY(Y)+(\\w|\\ )*" :: String) = return . Just $ "LMAO"-}
+    {-| str =~ ("(\\ )*(l|L)inux(\\ )*" :: String)      = return . Just $ "*GNU/Linux"-}
+    {-| str =~ ("^(\\ )*(OMG|omg)(\\ )*$" :: String)    = return . Just $ "我的天啊!"-}
+    | str =~ ("^/interject$" :: String)                = outputFile "interject.txt"
+    | str =~ ("^/dbsize$" :: String)                   = liftM Just $ dbsize
+    | str =~ ("^/dbstats$" :: String)                  = liftM Just $ dbstats
+    | str =~ ("^/markovtrain (\\w)*" :: String)        = markovTrain txt
+    | str =~ ("^/markov (\\w)*" :: String)             = markov txt
+    | str =~ ("^/ask (\\w)*" :: String)                = cobe txt
+    | str =~ ("^/train$" :: String)                    = cobeTrain
+    | str =~ ("^/last (\\w)*" :: String)              = lastMsg txt
+    | str =~ ("^/bestof" :: String)                    = bestof
+    | str =~ ("^/topreplies" :: String)                = topreplies
+    | str =~ ("^/help$" :: String)                     = showHelp
+    | otherwise                                        = return Nothing
     where
         str = unpack txt
 
+processPhotoMessage :: Text -> IO (Maybe FilePath)
+processPhotoMessage txt
+    | str =~ ("^/top$" :: String)  = topLastWeek
+    | otherwise                    = return Nothing
+    where
+        str = unpack txt
 
 
 outputFile :: FilePath -> IO (Maybe Text)
@@ -137,3 +161,43 @@ markov query = do
         else do
             let user = elements !! 1
             liftIO . liftM (Just . pack) $ readProcess "python" ["markov.py", unpack user] []
+
+
+lastMsg :: Text -> IO (Maybe Text)
+lastMsg query = runDB $ do
+    liftIO $ print query
+    let user = (take 2 . T.words $ query) !! 1
+    last <- liftM (fmap unValue . listToMaybe) . select $
+                from $ \(u, m) -> do
+                where_ (just (u ^. UserId) ==. m ^. UpdateMessageFrom)
+                where_ (u ^. UserFirstName `like` val ("%" <> user <> "%"))
+                mapM (\x -> where_ (not_ $ m ^. UpdateMessageMessage `like` just (val $ "%" <> x <> "%"))) commands
+                orderBy [desc (m ^. UpdateMessageDate)]
+                limit 1
+                return (m ^. UpdateMessageMessage)
+    return (join last)
+
+showHelp :: IO (Maybe Text)
+showHelp = return . Just . T.unlines . map (\(c, h) -> c <> ": " <> h) $ commandsHelp
+
+bestof :: IO (Maybe Text)
+bestof = do
+    last <- lastWeek
+    more <- runDB $ moreReactions last
+    case more of
+        Nothing -> return Nothing
+        Just (m, v) -> 
+            case  updateMessageMessage m of
+                Nothing -> return . Just $ "No hay mejores comentarios esta semana"
+                Just msg -> return . Just $ "Mejor comentario de la semana:\n" <> msg <> "\nCon: " <> (T.pack . show $ v) <> " mensajes recibidos"
+
+topreplies :: IO (Maybe Text)
+topreplies = do
+    last <- lastWeek
+    more <- runDB $ moreReplies last
+    case more of
+        Nothing -> return Nothing
+        Just (m, v) -> do
+            case  updateMessageMessage m of
+                Nothing -> return . Just $ "No hay mejores comentarios esta semana"
+                Just msg -> return . Just $ "Mayor cantidad de respuestas de la semana:\n" <> msg <> "\nCon: " <> (T.pack . show $ v) <> " mensajes recibidos"

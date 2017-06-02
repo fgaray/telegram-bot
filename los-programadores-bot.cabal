@@ -35,4 +35,11 @@ executable los-programadores-bot
                        cereal,
                        cereal-text,
                        bytestring,
-                       regex-tdfa
+                       regex-tdfa,
+                       aeson,
+                       Chart,
+                       Chart-cairo,
+                       time,
+                       lens,
+                       data-default,
+                       mime-types

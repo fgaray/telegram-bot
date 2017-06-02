@@ -25,6 +25,8 @@ You need an API key for a telegram bot. Then just run:
 TOKEN=YOUR-API-KEY ./los-programadores-bot
 ```
 
+Remember to put "bot" in your API KEY like "bot123:abcd"
+
 # New actions
 
 If you want to add new actions that respond to messages, you can add them in

@@ -19,17 +19,22 @@ import Network.HTTP.Client
 import System.Environment (getEnv)
 import Data.Text (pack)
 import Control.Monad.Reader (ask)
+import System.Environment
 
 
 
 main :: IO ()
 main = do
+    {-args <- getArgs -}
+    {-forM_ args $ \x -> do-}
+        {-convertToJSON (read x) "los-programadores-all/"-}
     token <- liftM (Token . pack) $ getEnv "TOKEN"
     print token
     logger <- startLogger
     manager <- newManager tlsManagerSettings
     migrate
-    runClient (client logger manager) token manager
+    exit <- runClient (client logger manager) token manager
+    print exit
     return ()
 
 client :: LoggerSet -> Manager -> TelegramClient ()

@@ -27,27 +27,27 @@ import Data.Traversable (sequence)
 import Data.Serialize
 import Data.Serialize.Text
 import qualified Data.ByteString as BS
+import qualified Data.ByteString.Lazy as LBS
+import qualified Data.Aeson as Aeson
+import Data.Int
+import Data.List (sortBy)
+import Data.Monoid
+import Data.Time.Clock
+import Data.Time.Clock.POSIX
 
-instance Serialize Venue
-instance Serialize Contact
-instance Serialize Voice
-instance Serialize Video
-instance Serialize Sticker
-instance Serialize Animation
-instance Serialize Game
-instance Serialize PhotoSize
-instance Serialize Document
-instance Serialize Audio
-instance Serialize MessageEntity
-instance Serialize ChatType
-instance Serialize CallbackQuery
-instance Serialize ChosenInlineResult
-instance Serialize Location
-instance Serialize Chat
-instance Serialize InlineQuery
-instance Serialize Telegram.User
-instance Serialize Message
-instance Serialize Update
+
+commands :: [Text]
+commands = concat $ map (\c -> [c, "/" <> c]) cs
+    where cs = 
+            [ "dbsize"
+            , "dbstats"
+            , "markov"
+            , "markovtrain"
+            , "ask"
+            , "train"
+            , "last"
+            , "help"
+            ]
 
 
 share [mkPersist sqlSettings, mkMigrate "migrateAll"] [persistLowerCase|
@@ -56,7 +56,7 @@ UpdateMessage
     messageId Int
     from UserId Maybe
     date Int
-    chat Int
+    chat Int64
     message Text Maybe
     replyTo UpdateMessageId Maybe
     deriving Show
@@ -107,9 +107,8 @@ saveUpdateMessage u@Update{..} = do
                     insertedEntities <- sequence $ fmap (mapM insertEntityDB) entities
                     replyTo <- liftM join . sequence . fmap getReplyTo $ reply_to_message 
                     insert $ UpdateMessage update_id message_id userId date (chat_id chat) text replyTo
-                    let serialized = encode u
                     liftIO $ print ("Escribiendo "  ++ show update_id)
-                    liftIO $ BS.writeFile ("los-programadores-all/" ++ show update_id ++  ".cereal") serialized
+                    liftIO $ LBS.writeFile ("los-programadores-all/" ++ show update_id ++  ".json") (Aeson.encode u)
                     return . Just $ u
 
 
@@ -154,3 +153,87 @@ getLastOffset = liftM (fmap unValue . listToMaybe) . select $
     orderBy [desc (u ^. UpdateMessageMessageId)]
     limit 1
     return (u ^. UpdateMessageUpdateId)
+
+
+{-convertToJSON :: Int -> String -> IO ()-}
+{-convertToJSON updateId path = do-}
+    {-contents <- BS.readFile (path ++ show updateId ++ ".cereal")-}
+    {-let decoded :: Either String Update = decode contents-}
+    {-case decoded of-}
+        {-Left err -> putStrLn $ "Can't decode: " ++ err-}
+        {-Right x -> do-}
+            {-liftIO $ LBS.writeFile (path ++ show updateId ++  ".json") (Aeson.encode x)-}
+
+
+
+messagesFrom :: Int -> ReaderT SqlBackend (NoLoggingT (ResourceT IO)) [(User, UpdateMessage)]
+messagesFrom x = liftM (map (\(x, y) -> (entityVal x, entityVal y))) . select $
+    from $ \(u, m) -> do
+    where_ (just (u ^. UserId) ==. m ^. UpdateMessageFrom)
+    where_ (m ^. UpdateMessageDate DB.>. val x)
+    return (u, m)
+
+
+
+messagesFromGroup :: Int -> ReaderT SqlBackend (NoLoggingT (ResourceT IO)) [(Text, Int)]
+messagesFromGroup day = liftM (map (\(x, y) -> (unValue x, unValue y))) . select $
+    from $ \(u, m) -> do
+    mapM (\x -> where_ (not_ $ m ^. UpdateMessageMessage `like` just (val $ "%" <> x <> "%"))) commands
+    where_ (just (u ^. UserId) ==. m ^. UpdateMessageFrom)
+    where_ (m ^. UpdateMessageDate DB.>. val day)
+    groupBy (just $ m ^. UpdateMessageFrom)
+    return (u ^. UserFirstName, countRows :: SqlExpr (Value Int))
+
+
+-- | Return the message with more replies
+moreReplies :: Int -> ReaderT SqlBackend (NoLoggingT (ResourceT IO)) (Maybe (UpdateMessage, Int))
+moreReplies day = liftM (joinTuple . listToMaybe . map (\(x, y) -> (fmap entityVal x, unValue y))) . select $
+    from $ \(u, r) -> do
+    mapM (\x -> where_ (not_ $ u ^. UpdateMessageMessage `like` just (val $ "%" <> x <> "%"))) commands
+    where_ (DB.not_ $ DB.isNothing (u ^. UpdateMessageReplyTo))
+    where_ (u ^. UpdateMessageReplyTo ==. r ?. UpdateMessageId)
+    where_ (u ^. UpdateMessageDate DB.>. val day)
+    groupBy (just $ u ^. UpdateMessageReplyTo)
+    orderBy [desc (countRows :: SqlExpr (Value Int))]
+    return (r, countRows :: SqlExpr (Value Int))
+
+    where
+        joinTuple :: Maybe (Maybe a, b) -> Maybe (a, b)
+        joinTuple Nothing = Nothing
+        joinTuple (Just (Nothing, _)) = Nothing
+        joinTuple (Just (Just x, y)) = Just (x, y)
+
+
+-- | Return the message that activates the more number of reactions in a period
+-- of time. We iterate over the messages in the DB and count the ones that are
+-- separated by 60 seconds.
+moreReactions :: Int -> ReaderT SqlBackend (NoLoggingT (ResourceT IO)) (Maybe (UpdateMessage, Int))
+moreReactions day = do
+    messages :: [(UpdateMessage, Int)] <- search
+    let sorted = reverse . sortBy ((\(_, x) (_, y) -> compare x y)) $ messages
+    return (listToMaybe sorted)
+    where
+        search = liftM (map (\(x, y) -> (entityVal x, unValue y))) . select $
+            from $ \u -> do
+                where_ (u ^. UpdateMessageDate DB.>. val day)
+                mapM (\x -> where_ (not_ $ u ^. UpdateMessageMessage `like` just (val $ "%" <> x <> "%"))) commands
+                return (u, sub_select $ from $ \other -> do
+                    where_ (other ^. UpdateMessageDate DB.>. val day)
+                    where_ (other ^. UpdateMessageId DB.>. u ^. UpdateMessageId)
+                    where_ ((other ^. UpdateMessageDate) DB.-. u ^. UpdateMessageDate DB.<. val 60)
+                    return (countRows :: SqlExpr (Value Int)))
+
+
+lastWeek :: IO Int
+lastWeek = do
+    let lastWeek = -7*24*60*60
+    today <- getCurrentTime
+    return . fromTime . utcTimeToPOSIXSeconds $ lastWeek `addUTCTime` today
+
+
+toTime :: Int -> UTCTime
+toTime = posixSecondsToUTCTime . fromInteger . toInteger
+
+-- | Ugly hack!
+fromTime :: POSIXTime -> Int
+fromTime = read . takeWhile (/='.') . show
