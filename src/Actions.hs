@@ -186,10 +186,10 @@ bestof = do
     more <- runDB $ moreReactions last
     case more of
         Nothing -> return Nothing
-        Just (m, v) -> 
+        Just (u, m, v) -> 
             case  updateMessageMessage m of
                 Nothing -> return . Just $ "No hay mejores comentarios esta semana"
-                Just msg -> return . Just $ "Mejor comentario de la semana:\n" <> msg <> "\nCon: " <> (T.pack . show $ v) <> " mensajes recibidos"
+                Just msg -> return . Just $ "Mejor comentario de la semana:\n" <> msg <> "\nPor: " <> userFirstName u <> "\nCon: " <> (T.pack . show $ v) <> " mensajes recibidos"
 
 topreplies :: IO (Maybe Text)
 topreplies = do
@@ -197,7 +197,7 @@ topreplies = do
     more <- runDB $ moreReplies last
     case more of
         Nothing -> return Nothing
-        Just (m, v) -> do
+        Just (u, m, v) -> do
             case  updateMessageMessage m of
                 Nothing -> return . Just $ "No hay mejores comentarios esta semana"
-                Just msg -> return . Just $ "Mayor cantidad de respuestas de la semana:\n" <> msg <> "\nCon: " <> (T.pack . show $ v) <> " mensajes recibidos"
+                Just msg -> return . Just $ "Mayor cantidad de respuestas de la semana:\n" <> msg <> "\nPor: " <> userFirstName u <> "\nCon: " <> (T.pack . show $ v) <> " mensajes recibidos"

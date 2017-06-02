@@ -186,38 +186,40 @@ messagesFromGroup day = liftM (map (\(x, y) -> (unValue x, unValue y))) . select
 
 
 -- | Return the message with more replies
-moreReplies :: Int -> ReaderT SqlBackend (NoLoggingT (ResourceT IO)) (Maybe (UpdateMessage, Int))
-moreReplies day = liftM (joinTuple . listToMaybe . map (\(x, y) -> (fmap entityVal x, unValue y))) . select $
-    from $ \(u, r) -> do
+moreReplies :: Int -> ReaderT SqlBackend (NoLoggingT (ResourceT IO)) (Maybe (User, UpdateMessage, Int))
+moreReplies day = liftM (joinTuple . listToMaybe . map (\(z, x, y) -> (entityVal z, fmap entityVal x, unValue y))) . select $
+    from $ \(user, u, r) -> do
     mapM (\x -> where_ (not_ $ u ^. UpdateMessageMessage `like` just (val $ "%" <> x <> "%"))) commands
+    where_ (just (user ^. UserId) ==. u ^. UpdateMessageFrom)
     where_ (DB.not_ $ DB.isNothing (u ^. UpdateMessageReplyTo))
     where_ (u ^. UpdateMessageReplyTo ==. r ?. UpdateMessageId)
     where_ (u ^. UpdateMessageDate DB.>. val day)
     groupBy (just $ u ^. UpdateMessageReplyTo)
     orderBy [desc (countRows :: SqlExpr (Value Int))]
-    return (r, countRows :: SqlExpr (Value Int))
+    return (user, r, countRows :: SqlExpr (Value Int))
 
     where
-        joinTuple :: Maybe (Maybe a, b) -> Maybe (a, b)
+        joinTuple :: Maybe (c, Maybe a, b) -> Maybe (c, a, b)
         joinTuple Nothing = Nothing
-        joinTuple (Just (Nothing, _)) = Nothing
-        joinTuple (Just (Just x, y)) = Just (x, y)
+        joinTuple (Just (_, Nothing, _)) = Nothing
+        joinTuple (Just (z, Just x, y)) = Just (z, x, y)
 
 
 -- | Return the message that activates the more number of reactions in a period
 -- of time. We iterate over the messages in the DB and count the ones that are
 -- separated by 60 seconds.
-moreReactions :: Int -> ReaderT SqlBackend (NoLoggingT (ResourceT IO)) (Maybe (UpdateMessage, Int))
+moreReactions :: Int -> ReaderT SqlBackend (NoLoggingT (ResourceT IO)) (Maybe (User, UpdateMessage, Int))
 moreReactions day = do
-    messages :: [(UpdateMessage, Int)] <- search
-    let sorted = reverse . sortBy ((\(_, x) (_, y) -> compare x y)) $ messages
+    messages :: [(User, UpdateMessage, Int)] <- search
+    let sorted = reverse . sortBy ((\(_, _, x) (_, _, y) -> compare x y)) $ messages
     return (listToMaybe sorted)
     where
-        search = liftM (map (\(x, y) -> (entityVal x, unValue y))) . select $
-            from $ \u -> do
+        search = liftM (map (\(z, x, y) -> (entityVal z, entityVal x, unValue y))) . select $
+            from $ \(user, u) -> do
                 where_ (u ^. UpdateMessageDate DB.>. val day)
+                where_ (just (user ^. UserId) ==. u ^. UpdateMessageFrom)
                 mapM (\x -> where_ (not_ $ u ^. UpdateMessageMessage `like` just (val $ "%" <> x <> "%"))) commands
-                return (u, sub_select $ from $ \other -> do
+                return (user, u, sub_select $ from $ \other -> do
                     where_ (other ^. UpdateMessageDate DB.>. val day)
                     where_ (other ^. UpdateMessageId DB.>. u ^. UpdateMessageId)
                     where_ ((other ^. UpdateMessageDate) DB.-. u ^. UpdateMessageDate DB.<. val 60)
