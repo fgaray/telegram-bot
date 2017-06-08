@@ -41,7 +41,7 @@ processAction :: LoggerSet -> Update -> TelegramClient ()
 processAction logger Update{..} =
     case message of
         Nothing -> return ()
-        Just Message{..} -> do
+        Just Message{..} ->
             case text of
                 Nothing -> return ()
                 Just msg -> do
@@ -75,13 +75,13 @@ processTextMessage txt
     {-| str =~ ("(\\ )*(l|L)inux(\\ )*" :: String)      = return . Just $ "*GNU/Linux"-}
     {-| str =~ ("^(\\ )*(OMG|omg)(\\ )*$" :: String)    = return . Just $ "我的天啊!"-}
     | str =~ ("^/interject$" :: String)                = outputFile "interject.txt"
-    | str =~ ("^/dbsize$" :: String)                   = liftM Just $ dbsize
-    | str =~ ("^/dbstats$" :: String)                  = liftM Just $ dbstats
+    | str =~ ("^/dbsize$" :: String)                   = Just <$> dbsize
+    | str =~ ("^/dbstats$" :: String)                  = Just <$> dbstats
     | str =~ ("^/markovtrain (\\w)*" :: String)        = markovTrain txt
     | str =~ ("^/markov (\\w)*" :: String)             = markov txt
     | str =~ ("^/ask (\\w)*" :: String)                = cobe txt
     | str =~ ("^/train$" :: String)                    = cobeTrain
-    | str =~ ("^/last (\\w)*" :: String)              = lastMsg txt
+    | str =~ ("^/last (\\w)*" :: String)               = lastMsg txt
     | str =~ ("^/bestof" :: String)                    = bestof
     | str =~ ("^/topreplies" :: String)                = topreplies
     | str =~ ("^/help$" :: String)                     = showHelp
@@ -98,13 +98,13 @@ processPhotoMessage txt
 
 
 outputFile :: FilePath -> IO (Maybe Text)
-outputFile = liftM Just . T.readFile
+outputFile = fmap Just . T.readFile
 
 
 dbsize :: IO Text
 dbsize = runDB $ do
-    (Value val') <- liftM (fromJust . listToMaybe) . select $
-        from $ \(_ :: SqlExpr (Entity UpdateMessage)) -> do
+    (Value val') <- fmap (fromJust . listToMaybe) . select $
+        from $ \(_ :: SqlExpr (Entity UpdateMessage)) ->
         return (countRows :: SqlExpr (Value Int))
     return $ "Total messages in the database: " <> (pack . show $ val')
 
@@ -113,7 +113,7 @@ dbstats = runDB $ do
     xs <- select $
         from $ \(m, u) -> do
         where_ (m ^. UpdateMessageFrom ==. just (u ^. UserId))
-        mapM (\x -> where_ (not_ $ m ^. UpdateMessageMessage `like` just (val $ "%" <> x <> "%"))) commands
+        mapM_ (\x -> where_ (not_ $ m ^. UpdateMessageMessage `like` just (val $ "%" <> x <> "%"))) commands
         groupBy (just $ m ^. UpdateMessageFrom)
         return (u ^. UserFirstName, countRows :: SqlExpr (Value Int))
     let text = foldl' (\acc (name, rows) -> acc <> unValue name <> ": " <> (pack . show . unValue $ rows) <> "\n") "" xs
@@ -123,18 +123,18 @@ dbstats = runDB $ do
 
 cobeTrain :: IO (Maybe Text)
 cobeTrain = runDB $ do
-    text <- liftM (catMaybes . map unValue) . select $
+    text <- fmap (mapMaybe unValue) . select $
         from $ \(m) -> do
-        mapM (\x -> where_ (not_ $ m ^. UpdateMessageMessage `like` just (val $ "%" <> x <> "%"))) commands
+        mapM_ (\x -> where_ (not_ $ m ^. UpdateMessageMessage `like` just (val $ "%" <> x <> "%"))) commands
         return (m ^. UpdateMessageMessage)
     let ws = map unpack . map (\x -> x <> "\n") $ text
     case ws of
         [] -> return Nothing
-        xs -> liftIO . liftM (Just . pack) $ readProcess "python" ["cobe.py"] (unwords xs)
+        xs -> liftIO . fmap (Just . pack) $ readProcess "python" ["cobe.py"] (unwords xs)
 
 
 cobe :: Text -> IO (Maybe Text)
-cobe query = liftIO . liftM (Just . pack) $ readProcess "python" ["cobeAsk.py"] (unpack . T.unwords . drop 1 . T.words $ query)
+cobe query = liftIO . fmap (Just . pack) $ readProcess "python" ["cobeAsk.py"] (unpack . T.unwords . drop 1 . T.words $ query)
 
 
 markovTrain :: Text -> IO (Maybe Text)
@@ -143,16 +143,16 @@ markovTrain query = runDB $ do
     if length elements /= 2 then return Nothing
         else do
             let user = elements !! 1
-            text <- liftM (catMaybes . map unValue) . select $
+            text <- fmap (mapMaybe unValue) . select $
                 from $ \(u, m) -> do
                 where_ (just (u ^. UserId) ==. m ^. UpdateMessageFrom)
                 where_ (u ^. UserFirstName `like` val ("%" <> user <> "%"))
-                mapM (\x -> where_ (not_ $ m ^. UpdateMessageMessage `like` just (val $ "%" <> x <> "%"))) commands
+                mapM_ (\x -> where_ (not_ $ m ^. UpdateMessageMessage `like` just (val $ "%" <> x <> "%"))) commands
                 return (m ^. UpdateMessageMessage)
             let ws = map unpack . map (\x -> x <> ". ") $ text
             case ws of
                 [] -> return Nothing
-                xs -> liftIO . liftM (Just . pack) $ readProcess "python" ["markovTrain.py", unpack user] (unwords ws)
+                xs -> liftIO . fmap (Just . pack) $ readProcess "python" ["markovTrain.py", unpack user] (unwords ws)
 
 markov :: Text -> IO (Maybe Text)
 markov query = do
@@ -160,18 +160,18 @@ markov query = do
     if length elements /= 2 then return Nothing
         else do
             let user = elements !! 1
-            liftIO . liftM (Just . pack) $ readProcess "python" ["markov.py", unpack user] []
+            liftIO . fmap (Just . pack) $ readProcess "python" ["markov.py", unpack user] []
 
 
 lastMsg :: Text -> IO (Maybe Text)
 lastMsg query = runDB $ do
     liftIO $ print query
     let user = (take 2 . T.words $ query) !! 1
-    last <- liftM (fmap unValue . listToMaybe) . select $
+    last <- fmap (fmap unValue . listToMaybe) . select $
                 from $ \(u, m) -> do
                 where_ (just (u ^. UserId) ==. m ^. UpdateMessageFrom)
                 where_ (u ^. UserFirstName `like` val ("%" <> user <> "%"))
-                mapM (\x -> where_ (not_ $ m ^. UpdateMessageMessage `like` just (val $ "%" <> x <> "%"))) commands
+                mapM_ (\x -> where_ (not_ $ m ^. UpdateMessageMessage `like` just (val $ "%" <> x <> "%"))) commands
                 orderBy [desc (m ^. UpdateMessageDate)]
                 limit 1
                 return (m ^. UpdateMessageMessage)
