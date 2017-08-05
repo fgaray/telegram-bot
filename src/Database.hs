@@ -47,6 +47,7 @@ commands = concat $ map (\c -> [c, "/" <> c]) cs
             , "train"
             , "last"
             , "help"
+            , "alltop"
             ]
 
 
@@ -108,6 +109,7 @@ saveUpdateMessage u@Update{..} = do
                     replyTo <- liftM join . sequence . fmap getReplyTo $ reply_to_message 
                     insert $ UpdateMessage update_id message_id userId date (chat_id chat) text replyTo
                     liftIO $ print ("Escribiendo "  ++ show update_id)
+                    liftIO $ print ("Escribiendo "  ++ show message)
                     liftIO $ LBS.writeFile ("los-programadores-all/" ++ show update_id ++  ".json") (Aeson.encode u)
                     return . Just $ u
 
@@ -172,7 +174,6 @@ messagesFrom x = liftM (map (\(x, y) -> (entityVal x, entityVal y))) . select $
     where_ (just (u ^. UserId) ==. m ^. UpdateMessageFrom)
     where_ (m ^. UpdateMessageDate DB.>. val x)
     return (u, m)
-
 
 
 messagesFromGroup :: Int -> ReaderT SqlBackend (NoLoggingT (ResourceT IO)) [(Text, Int)]

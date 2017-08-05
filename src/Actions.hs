@@ -22,6 +22,7 @@ import Data.List (foldl')
 import Plots
 import Data.ByteString (ByteString)
 import Network.Mime
+import Debug.Trace
 
 
 
@@ -33,6 +34,7 @@ commandsHelp = [
     , ("/markovtrain [USER]", "Trains a markov chain using the messages of the [USER]")
     , ("/last [USER]", "Show the last message of the [USER]")
     , ("/help", "Shows this help")
+    , ("/alltop", "Total messages of the users in the week")
     ]
 
 
@@ -84,6 +86,7 @@ processTextMessage txt
     | str =~ ("^/last (\\w)*" :: String)               = lastMsg txt
     | str =~ ("^/bestof" :: String)                    = bestof
     | str =~ ("^/topreplies" :: String)                = topreplies
+    | str =~ ("^/alltop" :: String)                    = alltop
     | str =~ ("^/help$" :: String)                     = showHelp
     | otherwise                                        = return Nothing
     where
@@ -201,3 +204,12 @@ topreplies = do
             case  updateMessageMessage m of
                 Nothing -> return . Just $ "No hay mejores comentarios esta semana"
                 Just msg -> return . Just $ "Mayor cantidad de respuestas de la semana:\n" <> msg <> "\nPor: " <> userFirstName u <> "\nCon: " <> (T.pack . show $ v) <> " mensajes recibidos"
+
+
+alltop :: IO (Maybe Text)
+alltop = do
+    week <- lastWeek
+    userMessages <- runDB $ messagesFromGroup week
+    return . Just . T.unlines . map (\(u, m) -> u <> ": " <> (T.pack . show $ m)) $ userMessages
+
+
