@@ -28,6 +28,8 @@ TOKEN=botBOTID:YOUR-API-KEY ./los-programadores-bot
 
 Remember to put "bot" in your API KEY like "bot123:abcd"
 
+You need to disable the privacy with [botfather](https://core.telegram.org/bots#6-botfather) so that the bot can read the messages.
+
 # Set of commands
 
 ## /dbsize
