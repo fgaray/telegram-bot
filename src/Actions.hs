@@ -18,7 +18,7 @@ import Database
 import Database.Esqueleto
 import Data.Maybe
 import Data.Monoid
-import Data.List (foldl')
+import Data.List (foldl', sortBy)
 import Plots
 import Data.ByteString (ByteString)
 import Network.Mime
@@ -209,7 +209,7 @@ topreplies = do
 alltop :: IO (Maybe Text)
 alltop = do
     week <- lastWeek
-    userMessages <- runDB $ messagesFromGroup week
+    userMessages <- liftM (sortBy (\(_, m1) (_, m2) -> compare m2 m1)) . runDB $ messagesFromGroup week
     return . Just . T.unlines . map (\(u, m) -> u <> ": " <> (T.pack . show $ m)) $ userMessages
-
+    
 
