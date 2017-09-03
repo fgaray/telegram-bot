@@ -17,6 +17,7 @@ import Data.Text (pack)
 import Control.Monad.Reader (ask)
 import System.Environment
 import Control.Monad
+import qualified Server as S
 
 
 
@@ -30,6 +31,7 @@ main = do
     logger <- startLogger
     manager <- newManager tlsManagerSettings
     migrate
+    forkIO $ (S.server token manager)
     exit <- runClient (client logger manager) token manager
     print exit
     return ()

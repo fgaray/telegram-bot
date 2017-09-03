@@ -42,4 +42,8 @@ executable los-programadores-bot
                        time,
                        lens,
                        data-default,
-                       mime-types
+                       mime-types,
+                       servant,
+                       servant-server,
+                       wai,
+                       warp
