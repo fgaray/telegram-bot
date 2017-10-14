@@ -44,11 +44,11 @@ processAction :: LoggerSet -> Update -> TelegramClient ()
 processAction logger Update{..} =
     case message of
         Nothing -> return ()
-        Just Message{..} ->
+        Just messageJust@Message{..} ->
             case text of
                 Nothing -> return ()
                 Just msg -> do
-                    txt <- liftIO $ processTextMessage msg
+                    txt <- liftIO $ processTextMessage msg messageJust
                     let chatId = ChatId . chat_id $ chat
                     case txt of
                         -- | There is nothing to return
@@ -72,8 +72,8 @@ processAction logger Update{..} =
 -- | We call a program in awk to do simple regex and sustitution in the
 -- messages, in the future we can implemente more complex funcionalities in this
 -- function
-processTextMessage :: Text -> IO (Maybe Text)
-processTextMessage txt
+processTextMessage :: Text -> Message -> IO (Maybe Text)
+processTextMessage txt msg
     {-| str =~ ("(\\w|\\ )*AY(Y)+(\\w|\\ )*" :: String) = return . Just $ "LMAO"-}
     {-| str =~ ("(\\ )*(l|L)inux(\\ )*" :: String)      = return . Just $ "*GNU/Linux"-}
     {-| str =~ ("^(\\ )*(OMG|omg)(\\ )*$" :: String)    = return . Just $ "我的天啊!"-}
@@ -90,7 +90,7 @@ processTextMessage txt
     | str =~ ("^/alltop" :: String)                    = alltop
     | str =~ ("^/btfo$" :: String)                     = reportBTFO
     | str =~ ("^/help$" :: String)                     = showHelp
-    | str =~ ("BTFO" :: String)                        = B.countBTFO txt >> return Nothing
+    | str =~ ("BTFO" :: String)                        = B.countBTFO txt msg >> return Nothing
     | otherwise                                        = return Nothing
     where
         str = unpack txt
@@ -219,5 +219,6 @@ alltop = do
 reportBTFO :: IO (Maybe Text)
 reportBTFO = do
     btfos <- runDB $ allBTFO
-    let txt = foldl' (\acc (u, n) -> acc <> u <> ": " <> (pack . show $ n) <> "\n") "" btfos
+    let sorted = sortBy (\(_, i1) (_, i2) -> compare i2 i1) btfos
+        txt = foldl' (\acc (u, n) -> acc <> u <> ": " <> (pack . show $ n) <> "\n") "" sorted
     return (Just txt)

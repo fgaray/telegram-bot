@@ -255,9 +255,23 @@ fromTime = read . takeWhile (/='.') . show
 
 
 -- | Adds a BTFO to the user un the DB
-addBTFO :: [Text] -> Text -> ReaderT SqlBackend (NoLoggingT (ResourceT IO)) ()
+addBTFO :: [Int] -> Text -> ReaderT SqlBackend (NoLoggingT (ResourceT IO)) ()
 addBTFO [] _ = return ()
 addBTFO mentions msg = do
+    btfo <- insert $ BTFO msg
+    forM_ mentions $ \m -> do
+        user <- fmap (fmap entityKey . listToMaybe) . select $
+            from $ \u -> do
+            where_ (u ^. UserUserIdTelegram ==. val m)
+            limit 1
+            return u
+        case user of
+            Nothing -> return ()
+            Just key -> void $ insert $ UserBTFO key btfo
+
+addBTFOName :: [Text] -> Text -> ReaderT SqlBackend (NoLoggingT (ResourceT IO)) ()
+addBTFOName [] _ = return ()
+addBTFOName mentions msg = do
     btfo <- insert $ BTFO msg
     forM_ mentions $ \m -> do
         user <- fmap (fmap entityKey . listToMaybe) . select $
@@ -268,6 +282,8 @@ addBTFO mentions msg = do
         case user of
             Nothing -> return ()
             Just key -> void $ insert $ UserBTFO key btfo
+
+
 
 -- | Returns a list of all the BTFO for each user in all time
 allBTFO :: ReaderT SqlBackend (NoLoggingT (ResourceT IO)) [(Text, Int)]
