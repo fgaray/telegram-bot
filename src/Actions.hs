@@ -23,6 +23,7 @@ import Plots
 import Data.ByteString (ByteString)
 import Network.Mime
 import Debug.Trace
+import qualified BTFO as B
 
 
 
@@ -87,7 +88,9 @@ processTextMessage txt
     | str =~ ("^/bestof" :: String)                    = bestof
     | str =~ ("^/topreplies" :: String)                = topreplies
     | str =~ ("^/alltop" :: String)                    = alltop
+    | str =~ ("^/btfo$" :: String)                     = reportBTFO
     | str =~ ("^/help$" :: String)                     = showHelp
+    | str =~ ("BTFO" :: String)                        = B.countBTFO txt >> return Nothing
     | otherwise                                        = return Nothing
     where
         str = unpack txt
@@ -213,3 +216,8 @@ alltop = do
     return . Just . T.unlines . map (\(u, m) -> u <> ": " <> (T.pack . show $ m)) $ userMessages
     
 
+reportBTFO :: IO (Maybe Text)
+reportBTFO = do
+    btfos <- runDB $ allBTFO
+    let txt = foldl' (\acc (u, n) -> acc <> u <> ": " <> (pack . show $ n) <> "\n") "" btfos
+    return (Just txt)

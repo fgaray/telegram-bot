@@ -79,12 +79,23 @@ User
     firstName Text
     lastName Text Maybe
     deriving Show
+
+UserBTFO
+    user UserId
+    btfo BTFOId
+
+BTFO
+    message Text
 |]
 
 
 
 runDB :: ReaderT SqlBackend (NoLoggingT (ResourceT IO)) a -> IO a
-runDB = runSqlite "los-programadores.sqlite3"
+runDB =  runSqlite "los-programadores.sqlite3"
+
+
+runDBLog :: ReaderT SqlBackend (LoggingT IO) a -> IO a
+runDBLog = runStdoutLoggingT . withSqliteConn "los-programadores.sqlite3" . runSqlConn
 
 migrate = runDB $ runMigration migrateAll
 
@@ -240,3 +251,28 @@ toTime = posixSecondsToUTCTime . fromInteger . toInteger
 -- | Ugly hack!
 fromTime :: POSIXTime -> Int
 fromTime = read . takeWhile (/='.') . show
+
+
+
+-- | Adds a BTFO to the user un the DB
+addBTFO :: [Text] -> Text -> ReaderT SqlBackend (NoLoggingT (ResourceT IO)) ()
+addBTFO [] _ = return ()
+addBTFO mentions msg = do
+    btfo <- insert $ BTFO msg
+    forM_ mentions $ \m -> do
+        user <- fmap (fmap entityKey . listToMaybe) . select $
+            from $ \u -> do
+            where_ (u ^. UserUserName ==. just (val m))
+            limit 1
+            return u
+        case user of
+            Nothing -> return ()
+            Just key -> void $ insert $ UserBTFO key btfo
+
+-- | Returns a list of all the BTFO for each user in all time
+allBTFO :: ReaderT SqlBackend (NoLoggingT (ResourceT IO)) [(Text, Int)]
+allBTFO = fmap (map (\(u, b) -> (unValue u, unValue b))) . select $
+    from $ \(u, ubtfo) -> do
+    where_ (u ^. UserId ==. ubtfo ^. UserBTFOUser)
+    groupBy (ubtfo ^. UserBTFOUser)
+    return (u ^. UserFirstName, countRows)
